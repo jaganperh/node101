@@ -1,7 +1,7 @@
 
-// var redis = require("redis"),
-    var url = require("url")
-//    client = redis.createClient()
+var redis = require("redis"),
+    url = require("url"),
+    client = redis.createClient()
 
 function dataRequest()
 {
@@ -41,8 +41,13 @@ function getFieldMetadata(instance)
 
 function addMetadata(dataRequest)
 { 
-     
+     var metadataAllEntitiesSet = "entities"
+
+     // add tableName to list of entities
+
      console.log("adding ",dataRequest.tableName," to ", metadataAllEntitiesSet)
+
+     client.sadd(metadataAllEntitiesSet,JSON.stringify(dataRequest.tableName))
 
      // store field info to entity metadata for tableName
 
@@ -52,6 +57,7 @@ function addMetadata(dataRequest)
 
      console.log("calling sadd on ", entityFieldsSet, " with ", fields)
 
+     client.sadd(entityFieldsSet,fields)
 }
 
 function addItem(dataRequest)
@@ -74,6 +80,11 @@ function addItem(dataRequest)
     var allEntitiesList = dataRequest.tableName
 
     var key = dataRequest.tableName.concat(dataRequest.filterById)
+
+    client.set(key,JSON.stringify(dataRequest.body))
+
+    client.lpush(allEntitiesList, JSON.stringify(dataRequest.body))
+
 
 }
 function executeRequest(dataRequest, res)
@@ -120,39 +131,73 @@ function getMetadata(dataRequest, res)
 
 function getMetadataAllEntities(dataRequest, res)
 {
-     var response = ["contacts","customers","products"]
+    
+     var metadataAllEntitiesSet = "entities"
 
-     res.end(JSON.stringify(response))
+     client.smembers(metadataAllEntitiesSet, function(err, value) {
+                 if (err) {
+                     console.error("error");
+                 } else {
+                     console.log("smembers Worked: " + value);
+                     var response = new dataResponse()
+                     response.entities = value
+                     res.send(response)
+                 }
+                })
 }
 
 function getMetadataForEntity(entityName, res)
 {
-    var response = ""
-
-    switch(entityName)
-    {
-	case "contacts":
-		response = [ {"name":"firstName","type":"string"},{"name":"lastName","type":"string"}]
-         break;
-
-    }
-
-    res.end(JSON.stringify(response))
     
+     var entityFieldsSet = "metadata".concat(entityName) 
+
+     client.smembers(entityFieldsSet, function(err, value) {
+                 if (err) {
+                     console.error("error");
+                 } else {
+                     console.log("smembers on " + entityFieldsSet + " Worked: " + value);
+                     var response = new dataResponse()
+                     response.entities = value //TODO: clean up the way json.stringify/parse are used...
+                     res.send(response)
+                 }
+                })
 }
 
 function getItem(dataRequest, res)
 { 
-    var response = { "firstName": "jagan", "lastName": "peri" }
 
-    res.end(JSON.stringify(response))
+    var key = dataRequest.tableName.concat(dataRequest.filterById)
+
+    var retVal
+
+    client.get(key, function(err, value) {
+                 if (err) {
+                     console.error("error");
+                 } else {
+                     console.log("Worked: " + value);
+                     var response = new dataResponse()
+                     response.entities = JSON.parse(value)
+                     res.send(response)
+                 }
+                })
+
+
 }
 
 function getItems(dataRequest, res)
 { 
-    var response = [{ "firstName": "jagan", "lastName": "peri" }]
+    var allEntitiesList = dataRequest.tableName
 
-    res.end(JSON.stringify(response))
+    client.lrange(allEntitiesList, 0, -1, function (err, value) {
+        if (err) {
+            console.error("error");
+        } else {
+            console.log("Worked: " + value);
+            var response = new dataResponse()
+            response.entities = value
+            res.send(response)
+        }
+    })
 }
 // valid urls:
 // /odata/contacts -- return all contacts
