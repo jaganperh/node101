@@ -6,7 +6,7 @@
 var express = require('express')
   , routes = require('./routes')
   , user = require('./routes/user')
-  , datasvc = require('./routes/datasvc')
+  , redisDatasvc = require('./routes/redis')
   , queuesvc = require('./routes/queue')
   , sortedSetSvc = require('./routes/sortedSet')
   , http = require('http')
@@ -30,8 +30,8 @@ app.configure('development', function(){
   app.use(express.errorHandler());
 });
 
-app.all('/odata', datasvc.datasvc);
-app.all('/odata/*', datasvc.datasvc);
+app.all('/collections', redisDatasvc.redisDatasvc);
+app.all('/collections/*', redisDatasvc.redisDatasvc);
 app.all('/queues', queuesvc.queuesvc)
 app.all('/queues/*', queuesvc.queuesvc)
 app.all('/sortedsets', sortedSetSvc.sortedSetSvc)
