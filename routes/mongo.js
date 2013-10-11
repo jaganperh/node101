@@ -2,7 +2,7 @@
 var mongo = require("mongoskin"),
 
     url = require("url")
-var db = mongo.db('localhost:27017/tenant2?auto_reconnect', {safe:true});
+var db = mongo.db('localhost:27017/tenant3?auto_reconnect', {safe:true});
 var entities = db.collection("entities")
 
 function entityMetadata(name)
@@ -24,6 +24,9 @@ function dataRequest()
     this.tableName = ""
     this.filterById = ""
     this.body = "testbody"
+    this.queryString = null
+    this.jsonQueryString = new Object()
+    this.functionName = ""
     
 }
 
@@ -122,12 +125,14 @@ function executeRequest(dataRequest, res)
 
         case "get":
 
-            if (dataRequest.tableName == "metadata")
-            { 
-                 getMetadata(dataRequest,res)
+            if (dataRequest.tableName == "metadata") {
+                getMetadata(dataRequest, res)
 
             }
-
+            else if (dataRequest.functionName == "getnear") {
+                executeGetNearRequest(dataRequest, res)
+                
+            }
             else if (dataRequest.filterById != "") {
 
                 getItem(dataRequest, res)
@@ -141,6 +146,64 @@ function executeRequest(dataRequest, res)
             break;
     }
 }
+function filter(name, value) { 
+   this.propertyName = name
+   this.propertyValue = value
+
+}
+function executeGetNearRequest(dataRequest, res) { 
+    // /collections/customers/getnear?location=value&field=value
+
+    var collection = db.collection(dataRequest.tableName)
+
+    var locationValue = null
+
+    for (var p in dataRequest.jsonQueryString) { 
+        // TODO: eventually this needs to be based on field metadata rather than assuming a fixed geo field
+        // called location.
+
+        // TODO: need to add support for multiple filter clauses. right now, only the last one is used.
+        if (p.toLowerCase() == "location") {
+            locationValue = dataRequest.jsonQueryString[p]
+            // remove the location attribute from queryString object, so queryString object can be passed as is to
+            // find function...
+            // TODO: this needs to be cleaned up.
+            delete dataRequest.jsonQueryString[p]
+        }
+
+        if (typeof dataRequest.jsonQueryString[p] == "string")
+        { 
+            // generate a like query using regex rather than exact match.
+            var strValue = dataRequest.jsonQueryString[p]
+            var rg = new RegExp(strValue,"i")
+            delete dataRequest.jsonQueryString[p]
+            dataRequest.jsonQueryString[p] = rg
+        
+        
+        }
+    }
+
+    console.log(dataRequest.jsonQueryString)
+
+    var lq = new locationQuery(dataRequest.tableName, locationValue, dataRequest.jsonQueryString)
+
+    console.log("lq: ", lq)
+
+    db.command(lq, function (err, value)
+                  { 
+                    console.log(value)
+                    res.send(value)
+                  }
+               )
+
+}
+
+function locationQuery(collectionName, locationValue, filterQuery) { 
+     this.geoNear = collectionName
+     this.spherical = true
+     this.near = locationValue
+     this.query = filterQuery
+     }
 
 function getMetadata(dataRequest, res)
 {
@@ -251,11 +314,28 @@ function parseUri(req)
 
     r.tableName = pathParts[2] // tableName == "metadata" for metdata requests - clean this up.
 
+    // - /collections/customers/cust1 or /collections/customers/getnear?location=value&_id=value
     if (pathParts.length == 4)
     { 
-        r.filterById = pathParts[3].toLowerCase() //filterById == entityname (contacts) for metadata requests - clean this up.
+        if(pathParts[3].toLowerCase() == "getnear")
+        {
+            r.functionName = "getnear"
+        }
+        else
+        {
+            
+            r.filterById = pathParts[3].toLowerCase() //filterById == entityname (contacts) for metadata requests - clean this up.
+        }
     
     }
+
+    r.queryString = req.query
+    for (var p in r.queryString) { 
+        r.jsonQueryString[p] = JSON.parse(r.queryString[p])
+    
+    
+    }
+
 
     return r
 }
