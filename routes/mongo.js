@@ -2,7 +2,8 @@
 var mongo = require("mongoskin"),
 
     url = require("url")
-var db = mongo.db('localhost:27017/tenant3?auto_reconnect', {safe:true});
+//TODO: we might have a db per tenant - need a way to map tenant name to a db...
+var db = mongo.db('localhost:27017/zomatodb?auto_reconnect', {safe:true});
 var entities = db.collection("entities")
 
 function entityMetadata(name)
@@ -12,10 +13,11 @@ function entityMetadata(name)
 
 }
 
-function fieldMetadata(name, type)
+function fieldMetadata(name, type, isArray)
 {
     this._id = name
     this.type = type
+    this.isArray = isArray
 }
 
 function dataRequest()
@@ -36,7 +38,7 @@ function getFieldMetadata(instance)
 
      for (var field in instance)
      { 
-         var fMetadata = new fieldMetadata(field, typeof instance[field])
+         var fMetadata = new fieldMetadata(field, typeof instance[field], Array.isArray(instance[field]))
 
          fields.push(fMetadata)
      }
@@ -67,7 +69,7 @@ function addMetadata(dataRequest)
 
 }
 
-function addItem(dataRequest)
+function addItem(dataRequest, res)
 { 
 
     // add the item and its metadata.
@@ -99,7 +101,14 @@ function addItem(dataRequest)
         { _id: dataRequest.filterById },
         { $set: dataRequest.body },
         { upsert: true },
-        onSaveComplete)
+        function(err, value) 
+	{
+		console.log(value)
+		res.send(dataRequest.body)
+
+	}
+
+      )
     
 }
 
@@ -119,7 +128,7 @@ function executeRequest(dataRequest, res)
     switch (dataRequest.requestType)
     {
         case "post":
-              addItem(dataRequest)
+              addItem(dataRequest, res)
 
             break;
 
@@ -203,6 +212,8 @@ function locationQuery(collectionName, locationValue, filterQuery) {
      this.spherical = true
      this.near = locationValue
      this.query = filterQuery
+     this.distanceMultiplier = 3959 // for miles.
+
      }
 
 function getMetadata(dataRequest, res)
